@@ -21,7 +21,8 @@ actually opens COM8.
 | Dry-run transport | implemented |
 | Serial transport | implemented (not yet exercised against hardware) |
 | High-level workflows (`status`, `home`, `drop_plate`, `pickup_plate`) | implemented as recorded-sequence playback |
-| FastAPI service | not yet (follow-up PR; see PLAN.md) |
+| FastAPI service (read-only `/`, `/health`, `/status`) | implemented |
+| FastAPI service (`/control/*` + claims) | not yet (follow-up; see PLAN.md) |
 | Physical validation | pending (see PHYSICAL_TESTS.md) |
 
 ## Install (development)
@@ -54,7 +55,26 @@ stacker.pickup_plate()
 stacker.close()
 ```
 
-## Run against real hardware
+## Run the read-only dashboard service
+
+The status service can run on any host (no hardware needed) and the
+`ac-organic-lab` dashboard will pick it up by flipping `agilent_biostack`
+from `adapter: mock` to `adapter: http` in `equipment.yaml`.
+
+```bash
+uv pip install -e ".[dev]"
+uv run agilent-biostack4-serve --dry-run --port 8030
+# then in another shell:
+curl http://localhost:8030/status
+```
+
+The dry-run tile will report `equipment_status: dry_run`. Once
+[PHYSICAL_TESTS.md](PHYSICAL_TESTS.md) is signed off, deploy on the lab
+PC with `dry_run = false` in `config.toml` and the same endpoint starts
+reporting `ready` / `requires_init` / `error` based on the real serial
+transport.
+
+## Run against real hardware (driver only)
 
 Only after [PHYSICAL_TESTS.md](PHYSICAL_TESTS.md) step 0 passes.
 

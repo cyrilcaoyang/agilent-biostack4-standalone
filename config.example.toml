@@ -25,10 +25,17 @@ header_timeout = 30.0
 payload_timeout = 5.0
 
 [service]
+# REST API service settings (used by `agilent-biostack4-serve`).
+# This service is read-only: it only publishes /, /health, /status. Control
+# endpoints land in a follow-up once PHYSICAL_TESTS.md is signed off.
+host = "0.0.0.0"                            # Bind address (Tailscale-only by ACL)
+port = 8030                                 # HTTP port for the dashboard aggregator
 # Set true to run without hardware. Uses the in-memory DryRunTransport so
-# tests, the REST service (when added), and bench-side dry runs all work
-# without touching COM8.
+# tests, the REST service, and bench-side dry runs all work without touching
+# COM8.
 dry_run = false
+cors_origins = ["*"]                        # Tailnet ACLs gate access, so * is fine
+startup_connect_timeout_s = 5.0             # Auto-connect timeout at service start
 
 [dashboard]
 # Reported in GET /status once the FastAPI service is added. Must match the
