@@ -1,0 +1,37 @@
+# Agilent BioStack 4 standalone driver - configuration template.
+#
+# Copy this file to config.toml and edit to match your hardware setup:
+#   cp config.example.toml config.toml
+#
+# config.toml is gitignored - your local settings stay on this machine.
+
+[instrument]
+# Serial port the BioStack 4 is on. On the lab PC this is COM8.
+com_port = "COM8"
+
+# Serial line settings. Captured from real Gen5 traffic; do not change these
+# unless you know your BioStack uses a different configuration.
+baudrate = 9600
+bytesize = 8
+parity = "N"
+stopbits = 2
+
+# Per-transaction timeouts in seconds.
+#   ack_timeout   - max wait for the 0x06 ACK byte after a write
+#   header_timeout - max wait for the 11-byte response header
+#   payload_timeout - max wait for the 4-byte status payload
+ack_timeout = 1.0
+header_timeout = 30.0
+payload_timeout = 5.0
+
+[service]
+# Set true to run without hardware. Uses the in-memory DryRunTransport so
+# tests, the REST service (when added), and bench-side dry runs all work
+# without touching COM8.
+dry_run = false
+
+[dashboard]
+# Reported in GET /status once the FastAPI service is added. Must match the
+# entry in ac-organic-lab/equipment.yaml.
+equipment_id = "agilent_biostack"
+equipment_name = "Agilent BioStack 4"
