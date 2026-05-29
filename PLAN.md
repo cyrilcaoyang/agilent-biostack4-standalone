@@ -11,13 +11,16 @@ hardware is touched.
 
 1. Drive the BioStack 4 over COM8 in standalone mode from Python.
 2. Expose only the two macro workflows the lab actually needs:
-   - `drop_plate()` - take one plate from the input stack and place it at the
-     calibrated drop-off / pick-up position.
-   - `pickup_plate()` - pick a plate up from that position and store it onto the
-     output stack.
+   - `stage_plate()` - take one plate from the input stack and place it at the
+     internal handoff position. (Was `drop_plate`; `b9`.)
+   - `present_plate()` - pick the staged plate up from the handoff and present
+     it to an external drop-off position outside the equipment, for a robot
+     arm / reader nest to take. (Was `pickup_plate`; `cd`. Bench-confirmed
+     2026-05-29 that this presents the plate OUT, not onto an internal output
+     stack — internal input->output transfer is `e2`, not yet exposed.)
 3. Surface non-success device responses as structured Python exceptions, not
    silent failures.
-4. Match the conventions of `agilent_plateloc` so a follow-up PR can graduate
+4. Match STATUS_SPEC v1.1 conventions so a follow-up PR can graduate
    this driver into the `ac-organic-lab` dashboard with `adapter: http`.
 5. Stay safe-by-default: no active commands fire without an explicit call from
    a human, and the first real bench session is gated by `PHYSICAL_TESTS.md`.
@@ -115,7 +118,7 @@ playback and error handling on top.
 
 ### `biostack.BioStack4`
 
-Public synchronous driver. Mirrors `agilent_plateloc.PlateLoc` in shape:
+Public synchronous driver. Standard STATUS_SPEC sync driver shape:
 
 ```python
 from agilent_biostack4 import BioStack4
@@ -124,8 +127,8 @@ stacker = BioStack4()             # reads com_port from config.toml
 stacker.connect()
 stacker.status()                  # raises if device does not ACK 'bd'
 stacker.home()                    # 'c0' to address 02
-stacker.drop_plate()              # macro: take from input stack, place at handoff
-stacker.pickup_plate()            # macro: pick from handoff, store in output stack
+stacker.stage_plate()             # macro: take from input stack, place at internal handoff
+stacker.present_plate()           # macro: pick from handoff, present out to external drop-off
 stacker.close()
 ```
 
@@ -152,15 +155,15 @@ physical-test phase. Until then, `BioStackCommandError` is the catch-all.
 
 ### `models`
 
-Copy of the `lab-status-contract` v1.1 shapes lifted verbatim from
-`agilent_plateloc.models`. Needed when the FastAPI service is added in a
+Copy of the `lab-status-contract` v1.1 shapes (vendored from ac-organic-lab's
+`docs/STATUS_SPEC.md`). Needed when the FastAPI service is added in a
 follow-up so the dashboard's existing v1.0/v1.1 aggregator picks the
 BioStack up by changing `adapter: mock` to `adapter: http` in
 `ac-organic-lab/equipment.yaml`.
 
 ### `config`
 
-TOML loader pattern lifted from `agilent_plateloc.config`. Defaults to
+Standard STATUS_SPEC TOML loader pattern. Defaults to
 `COM8`, `9600 8N2`, the captured serial flow chars, and a 30-second
 movement timeout. Real values live in `config.toml`, gitignored;
 `config.example.toml` is the committed template.
@@ -181,8 +184,8 @@ class BioStack4:
     def home(self) -> StatusPayload: ...
 
     # Workflows the lab actually needs
-    def drop_plate(self) -> StatusPayload: ...
-    def pickup_plate(self) -> StatusPayload: ...
+    def stage_plate(self) -> StatusPayload: ...
+    def present_plate(self) -> StatusPayload: ...
 ```
 
 `StatusPayload` is a small `dataclass` with the four-byte status, the
@@ -213,7 +216,7 @@ Three tiers, in increasing order of risk:
   - Property tests for checksum invariant.
 - `tests/test_biostack_dryrun.py`
   - Drives `BioStack4` with `DryRunTransport`, runs `status -> home ->
-    drop_plate -> pickup_plate`, asserts the exact request frames that get
+    stage_plate -> present_plate`, asserts the exact request frames that get
     sent and that no exception is raised.
   - Negative tests: `DryRunTransport` simulates each known failure status
     payload and asserts the matching exception class.

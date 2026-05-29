@@ -83,8 +83,8 @@ def test_no_control_routes_mounted(client: TestClient) -> None:
         "/control/startup",
         "/control/shutdown",
         "/control/home",
-        "/control/drop_plate",
-        "/control/pickup_plate",
+        "/control/stage_plate",
+        "/control/present_plate",
     ):
         response = client.post(path, json={})
         assert response.status_code == 404, path

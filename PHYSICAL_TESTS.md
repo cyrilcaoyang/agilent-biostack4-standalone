@@ -56,24 +56,32 @@ Goal: prove which of `b9` and `cd` is "drop one plate from input" and which
 is "pick up one plate to output". Our current guess is that `b9` is drop and
 `cd` is pickup, but it is a guess.
 
+> **RESOLVED 2026-05-29.** `b9` = stage (input stack → internal handoff),
+> `cd` = present (handoff → external drop-off OUTSIDE the equipment). The
+> two macros implement an external hand-off, not internal restacking, so
+> the API was renamed `drop_plate`→`stage_plate` and
+> `pickup_plate`→`present_plate`. See `PROTOCOL_NOTES.md` "Bench
+> Observations". The original procedure is kept below for the record.
+
 This test requires putting one labeled plate in the input stack and watching
 where it ends up.
 
-1. One labeled plate in input stack. Output stack empty.
-2. Run `b.drop_plate()`.
+1. One labeled plate in input stack.
+2. Run `b.stage_plate()`.
 3. Where did the plate go?
    - At the calibrated handoff position with the gripper retracted: this
-     command is doing what its name says. Continue.
+     command is doing what its name says. Continue. (This is what happened.)
    - Still in the input stack: command did not move it. Inspect the
-     `StatusPayload`. If `success=True`, `drop_plate` is bound to the wrong
+     `StatusPayload`. If `success=True`, `stage_plate` is bound to the wrong
      low-level command - swap `b9` <-> `cd` in
-     `recorded_sequences.drop_plate` and `recorded_sequences.pickup_plate`,
+     `recorded_sequences.STAGE_PLATE` and `recorded_sequences.PRESENT_PLATE`,
      then retry.
    - Anywhere else: stop. Open `PROTOCOL_NOTES.md`, add the observation,
      do not retry the command until we understand what happened.
-4. With the plate at the handoff position, run `b.pickup_plate()`.
+4. With the plate at the handoff position, run `b.present_plate()`.
 5. Where did it end up?
-   - In the output stack: workflow is correct.
+   - At the external drop-off position outside the equipment: workflow is
+     correct. (This is what happened.)
    - Anywhere else: same flow as step 3.
 
 Document the answer in `PROTOCOL_NOTES.md` and update the
@@ -98,10 +106,10 @@ Goal: collect more failing status payloads so we can map them to specific
 exception subclasses.
 
 1. Empty both stacks.
-2. Run `b.pickup_plate()`. Expect a non-success payload (no plate at the
+2. Run `b.present_plate()`. Expect a non-success payload (no plate at the
    handoff). Record the exact 4 bytes.
-3. Run `b.drop_plate()` with the input stack empty. Record the exact 4 bytes.
-4. Run `b.pickup_plate()` with the gripper deliberately misaligned (e.g. by
+3. Run `b.stage_plate()` with the input stack empty. Record the exact 4 bytes.
+4. Run `b.present_plate()` with the gripper deliberately misaligned (e.g. by
    running step 1 first then nudging the carrier with the power off - **only
    the bench operator decides if this is safe**). Record the bytes.
 5. Add each failure to `PROTOCOL_NOTES.md` and promote the most common ones
@@ -109,20 +117,24 @@ exception subclasses.
 
 ## Step 5 - Repeated runs
 
-Goal: confirm the driver can cycle plates end to end.
+Goal: confirm the driver can cycle plates end to end (external hand-off).
 
-1. Five labeled plates in the input stack. Output stack empty.
-2. Loop:
+Note: `present_plate` delivers each plate to the *same* external drop-off
+position. An operator (or the receiving robot arm) must clear the drop-off
+before the next `present_plate`, or the cycle will jam. Run one plate at a
+time with a person clearing the drop-off between cycles.
+
+1. Five labeled plates in the input stack. External drop-off clear.
+2. Per cycle (clear the drop-off between cycles):
    ```python
-   while True:
-       try:
-           b.drop_plate()
-           b.pickup_plate()
-       except StackEmptyError:
-           break
+   try:
+       b.stage_plate()
+       b.present_plate()
+   except StackEmptyError:
+       pass  # input stack exhausted
    ```
-3. Expected: five plates land in the output stack in reverse order, no
-   exceptions until the final `drop_plate` after the input stack is empty.
+3. Expected: five plates presented out one at a time in stack order, no
+   exceptions until the final `stage_plate` after the input stack is empty.
 
 ## Sign-off
 
@@ -132,9 +144,9 @@ performed and the bench operator has initialled them here:
 
 | Step | Date | Operator initials | Notes |
 | --- | --- | --- | --- |
-| 0 | | | |
-| 1 | | | |
-| 2 | | | |
+| 0 | 2026-05-29 | | PASS (real hardware). `bd` query: `command=0xbd, payload=00 80 00 00, success=True`, round-trip ~49 ms, COM8 opened (is_connected True). Run via explicit SerialTransport to bypass config.toml `dry_run = true`. Earlier same-day attempt was against DryRunTransport (elapsed 0.0) and did not count. |
+| 1 | 2026-05-29 | | PASS (real hardware). 5 home cycles (`c0`), all `success, payload=00 80 00 00`, ~21.3 s each, consistent. Carrier homed clean, operator confirmed no binding / abnormal noise. |
+| 2 | 2026-05-29 | | Command roles confirmed. `b9` = stage (input→internal handoff, ~5.5 s); `cd` = present (handoff→EXTERNAL drop-off outside the equipment, ~7.7 s) — external hand-off, not internal restacking. `PASSWORD` payload accepted (not one-shot). Team chose external-handoff intent; API renamed `drop_plate`→`stage_plate`, `pickup_plate`→`present_plate`, docstrings corrected. External-handoff repeatability still to be exercised (Step 5). See PROTOCOL_NOTES.md. |
 | 3 | | | |
 | 4 | | | |
 | 5 | | | |

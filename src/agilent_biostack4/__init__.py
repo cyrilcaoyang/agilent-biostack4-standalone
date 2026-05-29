@@ -11,8 +11,8 @@ Quick start::
     stacker.connect()
     stacker.status()
     stacker.home()
-    stacker.drop_plate()
-    stacker.pickup_plate()
+    stacker.stage_plate()    # input stack -> internal handoff
+    stacker.present_plate()  # handoff -> external drop-off (out of the instrument)
     stacker.close()
 
 This package is pre-bench-validation. See ``PLAN.md`` and

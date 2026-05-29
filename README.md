@@ -4,7 +4,7 @@ Standalone Python driver for the Agilent BioStack 4 microplate stacker over
 RS-232. No Gen5, no Cytation, no vendor software in the loop.
 
 The driver speaks the BioStack 4's binary framed serial protocol directly,
-exposes only the two workflows the lab needs (`drop_plate`, `pickup_plate`),
+exposes only the two workflows the lab needs (`stage_plate`, `present_plate`),
 and converts any non-success status payload from the device into a typed
 Python exception.
 
@@ -20,7 +20,7 @@ actually opens COM8.
 | Frame codec | implemented, unit-tested |
 | Dry-run transport | implemented |
 | Serial transport | implemented (not yet exercised against hardware) |
-| High-level workflows (`status`, `home`, `drop_plate`, `pickup_plate`) | implemented as recorded-sequence playback |
+| High-level workflows (`status`, `home`, `stage_plate`, `present_plate`) | implemented as recorded-sequence playback; command roles bench-confirmed 2026-05-29 |
 | FastAPI service (read-only `/`, `/health`, `/status`) | implemented |
 | FastAPI service (`/control/*` + claims) | not yet (follow-up; see PLAN.md) |
 | Physical validation | pending (see PHYSICAL_TESTS.md) |
@@ -50,8 +50,8 @@ stacker = BioStack4(transport=DryRunTransport())
 stacker.connect()
 print(stacker.status())
 stacker.home()
-stacker.drop_plate()
-stacker.pickup_plate()
+stacker.stage_plate()    # input stack -> internal handoff
+stacker.present_plate()  # handoff -> external drop-off (out of the instrument)
 stacker.close()
 ```
 

@@ -17,7 +17,7 @@ validation in ``PHYSICAL_TESTS.md`` and we do not want a stray HTTP call
 to put a plate in motion before that gate is passed.
 
 Once ``PHYSICAL_TESTS.md`` is signed off, a follow-up PR introduces
-``ClaimStore`` and the ``/control/{startup, drop_plate, pickup_plate, ...}``
+``ClaimStore`` and the ``/control/{startup, stage_plate, present_plate, ...}``
 endpoints. The v1.1 claim shapes are already in :mod:`models` so the API
 surface can grow without breaking compatibility.
 
@@ -63,7 +63,7 @@ logger = logging.getLogger(__name__)
 #
 # Empty everywhere for now: this service is read-only. The follow-up PR
 # fills these in with the BioStack-specific skill names (``startup``,
-# ``shutdown``, ``home``, ``drop_plate``, ``pickup_plate``) once /control/*
+# ``shutdown``, ``home``, ``stage_plate``, ``present_plate``) once /control/*
 # lands. Until then the SDK falls back to its catalog's ``requires_states``.
 _ALLOWED_ACTIONS_BY_STATE: dict[str, list[str]] = {
     "requires_init": [],

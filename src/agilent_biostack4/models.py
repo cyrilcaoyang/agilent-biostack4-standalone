@@ -1,10 +1,9 @@
 """Lab equipment status spec v1.1 shapes.
 
-This is a near-verbatim copy of ``agilent_plateloc.models`` (which is
-itself a copy of the unified contract from the ac-organic-lab monorepo:
-``docs/STATUS_SPEC.md`` and ``docs/STATUS_SPEC_v1_1.md``). It MUST stay
-in sync with those documents until a shared ``lab-status-contract``
-package is published.
+This is a near-verbatim copy of the unified status contract from the
+ac-organic-lab monorepo (``docs/STATUS_SPEC.md`` and
+``docs/STATUS_SPEC_v1_1.md``). It MUST stay in sync with those documents
+until a shared ``lab-status-contract`` package is published.
 
 Read-only BioStack 4 service: we only consume the read-side shapes
 (``EquipmentStatus``, ``ProbeResponse``, ``HealthResponse``). The

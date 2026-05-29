@@ -52,26 +52,26 @@ def test_home_replays_recorded_sequence():
     assert sent_commands == expected
 
 
-def test_drop_then_pickup_workflow():
+def test_stage_then_present_workflow():
     stacker, transport = _make_stacker()
     with stacker:
-        drop = stacker.drop_plate()
-        pickup = stacker.pickup_plate()
-    assert drop.success is True
-    assert pickup.success is True
+        stage = stacker.stage_plate()
+        present = stacker.present_plate()
+    assert stage.success is True
+    assert present.success is True
     sent_commands = [(req.address, req.command) for req in transport.history]
     expected = [
-        *[(step.address, step.command) for step in seqs.DROP_PLATE.steps],
-        *[(step.address, step.command) for step in seqs.PICKUP_PLATE.steps],
+        *[(step.address, step.command) for step in seqs.STAGE_PLATE.steps],
+        *[(step.address, step.command) for step in seqs.PRESENT_PLATE.steps],
     ]
     assert sent_commands == expected
 
 
-def test_pickup_failure_raises_no_plate_picked_up():
+def test_present_failure_raises_no_plate_picked_up():
     stacker, transport = _make_stacker()
     transport.set_response(0xCD, b"\x01\x80\x01\x17")
     with stacker, pytest.raises(NoPlatePickedUpError) as excinfo:
-        stacker.pickup_plate()
+        stacker.present_plate()
     assert excinfo.value.command == 0xCD
     assert excinfo.value.status_payload == b"\x01\x80\x01\x17"
 
@@ -80,14 +80,14 @@ def test_stack_empty_failure_raises_stack_empty():
     stacker, transport = _make_stacker()
     transport.set_response(0xCD, b"\x01\x80\x00\x16")
     with stacker, pytest.raises(StackEmptyError):
-        stacker.pickup_plate()
+        stacker.present_plate()
 
 
 def test_unknown_failure_payload_falls_back_to_base_exception():
     stacker, transport = _make_stacker()
     transport.set_response(0xCD, b"\x01\x80\xff\xfe")
     with stacker, pytest.raises(BioStackCommandError) as excinfo:
-        stacker.pickup_plate()
+        stacker.present_plate()
     assert type(excinfo.value) is BioStackCommandError
     assert excinfo.value.status_payload == b"\x01\x80\xff\xfe"
 
@@ -96,7 +96,7 @@ def test_macro_aborts_on_first_failed_step():
     stacker, transport = _make_stacker()
     transport.set_response(0xBD, b"\x01\x80\x00\x16")
     with stacker, pytest.raises(StackEmptyError):
-        stacker.drop_plate()
+        stacker.stage_plate()
     assert len(transport.history) == 1
     assert transport.history[0].command == 0xBD
 

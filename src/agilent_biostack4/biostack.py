@@ -8,14 +8,13 @@ a typed exception::
     stacker.connect()
     stacker.status()         # raises if device does not ACK
     stacker.home()
-    stacker.drop_plate()     # place a plate at the handoff position
-    stacker.pickup_plate()   # pick a plate from the handoff position
+    stacker.stage_plate()    # input stack -> internal handoff
+    stacker.present_plate()  # handoff -> external drop-off (out of the instrument)
     stacker.close()
 
 Internally each macro replays a sequence of frames captured from real
-Gen5 traffic (see ``recorded_sequences.py``). The byte-level meaning of
-some payloads is still provisional; bench validation in
-``PHYSICAL_TESTS.md`` resolves that.
+Gen5 traffic (see ``recorded_sequences.py``). The drop/present command
+roles were confirmed on the bench 2026-05-29 (see ``PROTOCOL_NOTES.md``).
 """
 
 from __future__ import annotations
@@ -131,23 +130,26 @@ class BioStack4:
         """Home all axes."""
         return self._run(seqs.HOME)
 
-    def drop_plate(self) -> StatusPayload:
-        """Take one plate from the input stack and place it at the handoff.
+    def stage_plate(self) -> StatusPayload:
+        """Move one plate from the input stack to the internal handoff position.
 
-        Maps to the ``b9`` macro family. This is a provisional binding
-        until ``PHYSICAL_TESTS.md`` step 2 confirms it. If the bench test
-        shows ``b9`` is actually the pickup, swap ``DROP_PLATE`` and
-        ``PICKUP_PLATE`` in :mod:`recorded_sequences`.
+        Maps to the ``b9`` macro family. Bench-confirmed 2026-05-29: the
+        plate ends at the internal handoff with the gripper retracted,
+        ready for :meth:`present_plate` to hand it out of the instrument.
+        See ``PROTOCOL_NOTES.md``.
         """
-        return self._run(seqs.DROP_PLATE)
+        return self._run(seqs.STAGE_PLATE)
 
-    def pickup_plate(self) -> StatusPayload:
-        """Pick a plate from the handoff and store it on the output stack.
+    def present_plate(self) -> StatusPayload:
+        """Pick the staged plate from the handoff and present it out of the instrument.
 
-        Maps to the ``cd`` macro family. Provisional binding; see
-        :meth:`drop_plate` and ``PHYSICAL_TESTS.md``.
+        Maps to the ``cd`` macro family. Bench-confirmed 2026-05-29: the
+        plate is delivered to an external drop-off position OUTSIDE the
+        equipment (for a robot arm / reader nest to take). This does NOT
+        restack the plate internally; internal input->output transfer is a
+        different command (``e2``, not yet exposed). See ``PROTOCOL_NOTES.md``.
         """
-        return self._run(seqs.PICKUP_PLATE)
+        return self._run(seqs.PRESENT_PLATE)
 
     # -- Internals -------------------------------------------------------
 

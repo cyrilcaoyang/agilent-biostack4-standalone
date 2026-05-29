@@ -1,6 +1,6 @@
 """TOML config loader for the BioStack 4 driver.
 
-Pattern lifted from ``agilent_plateloc.config``: look for ``config.toml``
+Standard STATUS_SPEC device-PC config-loader pattern: look for ``config.toml``
 walking up from this file, fall back to ``CWD/config.toml``, and serve
 defaults if no file is present.
 """

@@ -15,7 +15,7 @@ read-only aggregator will pick this up by flipping
 ``adapter: http``.
 
 A follow-up PR introduces ``/control/{startup, shutdown, home,
-drop_plate, pickup_plate}`` along with the v1.1 claim protocol, gated
+stage_plate, present_plate}`` along with the v1.1 claim protocol, gated
 on ``PHYSICAL_TESTS.md`` sign-off.
 
 Auth: none at the device level; access is gated by Tailscale ACLs.

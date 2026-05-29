@@ -9,8 +9,14 @@ Each sequence is a tuple of ``(address, command, payload)`` triples. The
 ``recorded_sequences`` module never builds the wire bytes itself; the
 transport layer encodes through :mod:`agilent_biostack4.frames`.
 
-The sequences here are PROVISIONAL until ``PHYSICAL_TESTS.md`` step 2
-confirms which command does drop and which does pickup.
+Command roles were PROVISIONAL until the 2026-05-29 bench session, which
+confirmed (see ``PROTOCOL_NOTES.md``):
+
+* ``b9`` moves one plate from the input stack to the internal handoff
+  position (``STAGE_PLATE``).
+* ``cd`` picks the plate from the handoff and presents it to an external
+  drop-off position OUTSIDE the equipment (``PRESENT_PLATE``) - it does
+  NOT restack internally.
 """
 
 from __future__ import annotations
@@ -67,35 +73,35 @@ HOME = RecordedSequence(
     ),
 )
 
-DROP_PLATE = RecordedSequence(
-    name="drop_plate",
+STAGE_PLATE = RecordedSequence(
+    name="stage_plate",
     steps=(
         RecordedStep(0x01, 0xBD, b"", "status check"),
         RecordedStep(
             0x01,
             0xBE,
             bytes.fromhex("01 00 00 00 00 00 00 00 88 9d 5f e8 ed 00 00 00 04 00"),
-            "drop-context setup ('be' from 4_verify_step1.csv #11)",
+            "stage-context setup ('be' from 4_verify_step1.csv #11)",
         ),
-        RecordedStep(0x02, 0xB9, b"", "verify/drop: place a plate at handoff (provisional)"),
+        RecordedStep(0x02, 0xB9, b"", "b9: input stack -> internal handoff (bench-confirmed)"),
     ),
     source_capture="4_verify_step1.csv",
     notes=(
-        "Provisional mapping. PHYSICAL_TESTS.md step 2 must confirm that "
-        "'b9' is the drop command. If the bench test shows it is actually "
-        "the pickup command, swap this sequence with PICKUP_PLATE."
+        "Bench-confirmed 2026-05-29: 'b9' moves one plate from the input "
+        "stack to the internal handoff position, gripper retracted (~5.5 s). "
+        "Pair with PRESENT_PLATE to hand a plate out of the instrument."
     ),
 )
 
-PICKUP_PLATE = RecordedSequence(
-    name="pickup_plate",
+PRESENT_PLATE = RecordedSequence(
+    name="present_plate",
     steps=(
         RecordedStep(0x01, 0xBD, b"", "status check"),
         RecordedStep(
             0x01,
             0xBE,
             bytes.fromhex("01 00 00 00 00 00 00 00 58 9d 5f e8 ed 00 00 00 04 00"),
-            "pickup-context setup ('be' from 4_verify_step1.csv #14)",
+            "present-context setup ('be' from 4_verify_step1.csv #14)",
         ),
         RecordedStep(
             0x02,
@@ -104,14 +110,15 @@ PICKUP_PLATE = RecordedSequence(
                 "50 41 53 53 57 4f 52 44 e0 0e 00 00 71 02 00 00 "
                 "24 aa 89 4b fb 7f 00 00 04 00"
             ),
-            "verify/pickup: pick from handoff and store on output (provisional)",
+            "cd: handoff -> external drop-off outside the equipment (bench-confirmed)",
         ),
     ),
     source_capture="4_verify_step1.csv",
     notes=(
-        "Provisional mapping. The 'cd' payload begins with ASCII 'PASSWORD' "
-        "followed by what looks like a session/timestamp tail. The exact "
-        "tail bytes captured here may need to be regenerated if the device "
-        "expects fresh values. PHYSICAL_TESTS.md step 2 covers this."
+        "Bench-confirmed 2026-05-29: 'cd' picks the plate from the internal "
+        "handoff and presents it to an EXTERNAL drop-off position outside "
+        "the equipment (~7.7 s) - it does NOT restack onto an output stack. "
+        "The 'cd' payload begins with ASCII 'PASSWORD'; the captured tail "
+        "bytes were accepted as-is, so they are not a one-shot token."
     ),
 )

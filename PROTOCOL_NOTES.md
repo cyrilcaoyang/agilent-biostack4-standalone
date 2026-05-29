@@ -83,10 +83,10 @@ Treat non-success status meanings as provisional until confirmed against more ca
 | `b0` | `01` | none | Observed during save-position flow |
 | `ad` | `02` | 20 bytes | Alignment command |
 | `ae` | `02` | 22 bytes | Z move-down command; requested distance appears at payload bytes 2-3 as little-endian |
-| `b9` | `02` | none | Verify/drop-related command |
+| `b9` | `02` | none | Verify/drop. **Bench-confirmed 2026-05-29:** moves one plate from the input stack to the internal handoff position, gripper retracted. ~5.5 s. |
 | `c1` | `02` | 18 bytes | Alignment/save-position command |
 | `c0` | `02` | none | Home all axes |
-| `cd` | `02` | 26 bytes | Verify pickup/store-related command; payload begins with ASCII `PASSWORD` |
+| `cd` | `02` | 26 bytes | Verify pickup; payload begins with ASCII `PASSWORD`. **Bench-confirmed 2026-05-29:** picks the plate from the internal handoff and presents it to an EXTERNAL drop-off position OUTSIDE the equipment — it does NOT store to the output stack. ~7.7 s. The captured `PASSWORD` payload was accepted as-is (not a one-shot token). |
 | `e2` | `02` | none | Move one plate from input stack to output stack |
 | `bc` | `02` | none | Move one plate from output stack to input stack |
 
@@ -136,6 +136,61 @@ For `move_plate_from_input_to_output_1`, the plate carrier moves to the input st
 For `move_plate_from_output_to_input_1`, the same bottom-plate transfer happens in the opposite direction: output stack to input stack.
 
 So `e2` and `bc` should be treated as stack-to-stack transfer commands, not as commands that present a plate to an external reader nest or arbitrary handoff position.
+
+## Bench Observations (2026-05-29, first hardware session)
+
+Driver run against real COM8 hardware (via an explicit `SerialTransport`;
+`config.toml` is pinned `dry_run = true` for the dashboard service, so the
+default `BioStack4()` constructor still simulates — bench runs must pass a
+`SerialTransport` explicitly or flip the flag).
+
+- **Step 0 (wire check):** PASS. `bd` → `00 80 00 00`, ~49 ms round-trip.
+- **Step 1 (home):** PASS. `c0` ×5, all `00 80 00 00`, ~21.3 s each, clean
+  homing confirmed by operator.
+- **Step 2 (command-role disambiguation):** mapping confirmed; the two
+  motions implement an *external hand-off*, so the API was renamed (below).
+  - `stage_plate()` → `b9` (was `drop_plate`): plate moved input stack →
+    internal handoff, gripper retracted. `success`, ~5.5 s.
+  - `present_plate()` → `cd` (was `pickup_plate`): plate moved handoff →
+    **external drop-off position outside the equipment**, NOT into an
+    output stack. `success`, ~7.7 s. The captured `PASSWORD` payload was
+    accepted, so it is not a one-shot session token (de-risks that PLAN.md
+    item).
+
+### Resolution (2026-05-29): external hand-off
+
+`b9`/`cd` are the calibration **verify drop/pickup** pair (Gen5 workflow
+step 4), and physically they implement *input-stack → handoff → external
+hand-off out*. They are NOT internal restacking.
+
+Team decision: the lab wants the **external hand-off** behaviour (present a
+plate out for the xArm / a reader nest). Accordingly:
+
+- `drop_plate` → renamed `stage_plate` (`b9`): input stack → internal handoff.
+- `pickup_plate` → renamed `present_plate` (`cd`): handoff → external drop-off.
+- Docstrings corrected to describe the external hand-off; the old
+  "store onto the output stack" wording was wrong and is removed.
+
+Internal input→output restacking (`e2`) and output→input (`bc`) remain
+**UNTESTED** on hardware and are not exposed in the public API. If internal
+restacking is ever needed, `e2`/`bc` are the commands to characterise — not
+the `b9`/`cd` verify pair.
+
+**Future work (requested 2026-05-29): return a plate to the output stack.**
+The lab will eventually want the BioStack to take a plate back and store it
+on the output stack. Note this is a *handoff → output stack* motion, which is
+NOT covered by any command observed so far: `b9`/`cd` are the external
+hand-off pair, and `e2`/`bc` are *internal stack-to-stack* (input↔output) and
+never visit the handoff/external position. Getting this capability requires a
+fresh Gen5 capture of exactly that operation (then replay as a new recorded
+sequence), or bench characterisation of `e2`/`bc` if a fully internal
+transfer turns out to be sufficient. Until then it is unsupported.
+
+Step 2's original "land in the output stack" pass criterion no longer
+applies; the criterion is now "plate is presented to the external drop-off".
+The sign-off row reflects that the behaviour is understood and the API
+renamed, with the external-handoff repeatability still to be exercised
+(Step 5).
 
 ## Safety Notes
 

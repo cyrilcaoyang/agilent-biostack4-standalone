@@ -1,6 +1,6 @@
 port-communication-captures/
 
-# Local config (per the agilent_plateloc convention)
+# Local config (not checked in; secrets and per-host values)
 config.toml
 
 # Python build / cache artifacts
