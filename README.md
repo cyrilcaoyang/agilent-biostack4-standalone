@@ -8,9 +8,11 @@ exposes only the two workflows the lab needs (`stage_plate`, `present_plate`),
 and converts any non-success status payload from the device into a typed
 Python exception.
 
-This package is **pre-bench-validation**. Read [PLAN.md](PLAN.md) and
-[PHYSICAL_TESTS.md](PHYSICAL_TESTS.md) before running any code path that
-actually opens COM8.
+Bench validation steps 0-5 are signed off (2026-05-29; see
+[PHYSICAL_TESTS.md](PHYSICAL_TESTS.md)). The read-only status service is
+cleared for deployment; the motion `/control/*` surface remains gated.
+Read [PLAN.md](PLAN.md) and [PHYSICAL_TESTS.md](PHYSICAL_TESTS.md) before
+running any code path that actually opens COM8.
 
 ## Status
 
@@ -19,11 +21,11 @@ actually opens COM8.
 | Protocol notes (sniffed) | [`PROTOCOL_NOTES.md`](PROTOCOL_NOTES.md) |
 | Frame codec | implemented, unit-tested |
 | Dry-run transport | implemented |
-| Serial transport | implemented (not yet exercised against hardware) |
+| Serial transport | implemented; exercised against hardware 2026-05-29 |
 | High-level workflows (`status`, `home`, `stage_plate`, `present_plate`) | implemented as recorded-sequence playback; command roles bench-confirmed 2026-05-29 |
-| FastAPI service (read-only `/`, `/health`, `/status`) | implemented |
+| FastAPI service (read-only `/`, `/health`, `/status`) | implemented; reports spec v1.0 (read-only baseline) |
 | FastAPI service (`/control/*` + claims) | not yet (follow-up; see PLAN.md) |
-| Physical validation | pending (see PHYSICAL_TESTS.md) |
+| Physical validation | steps 0-5 signed off 2026-05-29 (see PHYSICAL_TESTS.md) |
 
 ## Install (development)
 

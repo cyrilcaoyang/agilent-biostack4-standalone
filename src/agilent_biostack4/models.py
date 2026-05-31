@@ -19,7 +19,11 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-PROTOCOL_VERSION = "1.1"
+# This service implements only the read-only baseline (``/``, ``/health``,
+# ``/status``) — no claim endpoints — so it honestly reports ``"1.0"``. The
+# v1.1 claim shapes below are vendored ahead of the follow-up ``/control/*``
+# PR, which will flip this to ``"1.1"`` once claims are actually served.
+PROTOCOL_VERSION = "1.0"
 
 
 EquipmentKind = Literal[
