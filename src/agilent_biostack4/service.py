@@ -194,7 +194,10 @@ class BioStack4Service:
         if not self.dry_run:
             details["com_port"] = com_port
         details["read_only"] = True
-        details["bench_validation_pending"] = True
+        # Bench validation (PHYSICAL_TESTS.md steps 0-5) signed off on this
+        # date. The service stays read-only by choice; the motion control
+        # surface is a separate follow-up, not a validation gap.
+        details["bench_validated"] = "2026-05-29"
 
         if self.dry_run:
             state: str = "dry_run"
@@ -211,7 +214,7 @@ class BioStack4Service:
             message = self._last_error.message
         else:
             state = "ready"
-            message = "Transport open; awaiting bench validation before control lands"
+            message = "Transport open (read-only); motion control surface not yet exposed"
 
         required_actions: list[str] = ["startup"] if state == "requires_init" else []
 
