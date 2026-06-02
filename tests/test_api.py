@@ -1,15 +1,16 @@
-"""HTTP smoke tests for the read-only BioStack 4 service.
+"""HTTP smoke tests for the BioStack 4 spec endpoints.
 
 The FastAPI app is started against ``DryRunTransport`` so no hardware
 or platform-specific bindings are involved. Verifies:
 
 * The spec endpoints (``/``, ``/health``, ``/status``) exist and return
   the right pydantic shape.
-* ``GET /status`` reports ``equipment_status: dry_run`` in dry-run mode.
+* ``GET /status`` reports ``equipment_status: dry_run`` in dry-run mode
+  and advertises the full action set (so the surface is exercisable).
 * ``GET /status`` calls do NOT cause the transport to send any frame
   (so dashboard polling cannot wake the device up).
-* Hitting the endpoints from outside any claim flow works (no /control/*
-  routes mounted yet).
+
+Claim + control routes are covered in ``test_api_control.py``.
 """
 
 from __future__ import annotations
@@ -59,8 +60,17 @@ def test_status_dry_run_envelope(client: TestClient) -> None:
     assert body["equipment_kind"] == "plate_stacker"
     assert body["equipment_status"] == "dry_run"
     assert body["details"]["dry_run"] is True
-    assert body["details"]["read_only"] is True
-    assert body["allowed_actions"] == []
+    assert body["details"]["claimed_by"] is None
+    assert body["details"]["plate_staged"] is False
+    # dry_run advertises the full action set so the surface is exercisable.
+    assert set(body["allowed_actions"]) == {
+        "startup",
+        "shutdown",
+        "home",
+        "stage_plate",
+        "present_plate",
+        "handoff",
+    }
     assert "transport" in body["components"]
     assert body["components"]["transport"]["connected"] is True
 
@@ -76,15 +86,16 @@ def test_status_does_not_send_frames(
     assert transport.history == baseline
 
 
-def test_no_control_routes_mounted(client: TestClient) -> None:
-    # Read-only service: every /control/* must 404. The follow-up PR will
-    # mount these once PHYSICAL_TESTS.md is signed off.
+def test_control_routes_mounted_and_claim_gated(client: TestClient) -> None:
+    # Control routes are mounted (no 404) and hard-gated: a tokenless POST
+    # returns 423 Locked, never 404.
     for path in (
         "/control/startup",
         "/control/shutdown",
         "/control/home",
         "/control/stage_plate",
         "/control/present_plate",
+        "/control/handoff",
     ):
         response = client.post(path, json={})
-        assert response.status_code == 404, path
+        assert response.status_code == 423, path

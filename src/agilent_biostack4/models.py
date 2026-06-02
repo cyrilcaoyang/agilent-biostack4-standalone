@@ -5,11 +5,11 @@ ac-organic-lab monorepo (``docs/STATUS_SPEC.md`` and
 ``docs/STATUS_SPEC_v1_1.md``). It MUST stay in sync with those documents
 until a shared ``lab-status-contract`` package is published.
 
-Read-only BioStack 4 service: we only consume the read-side shapes
-(``EquipmentStatus``, ``ProbeResponse``, ``HealthResponse``). The
-``ClaimRequest`` / ``ClaimResponse`` / ``ClaimRejection`` / ``ClaimedBy``
-types are included so a follow-up PR can introduce ``/control/*`` and
-the v1.1 claim protocol without touching this file.
+The BioStack 4 service implements the full v1.1 surface: the read-side
+shapes (``EquipmentStatus``, ``ProbeResponse``, ``HealthResponse``) plus
+the claim protocol shapes (``ClaimRequest`` / ``ClaimResponse`` /
+``ClaimRejection`` / ``ClaimedBy``) consumed by ``claims.py`` and the
+``/control/*`` routes in ``api.py``.
 """
 
 from __future__ import annotations
@@ -19,6 +19,10 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+# This service implements the v1.1 surface: the read baseline (``/``,
+# ``/health``, ``/status``), the claim protocol
+# (``/control/{claim,heartbeat,release}``), and a guarded ``/control/*``
+# motion surface (see ``api.py`` / ``service.py``).
 PROTOCOL_VERSION = "1.1"
 
 

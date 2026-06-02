@@ -26,8 +26,9 @@ payload_timeout = 5.0
 
 [service]
 # REST API service settings (used by `agilent-biostack4-serve`).
-# This service is read-only: it only publishes /, /health, /status. Control
-# endpoints land in a follow-up once PHYSICAL_TESTS.md is signed off.
+# Conforms to lab status spec v1.1: /, /health, /status plus the claim
+# protocol (/control/{claim,heartbeat,release}) and a guarded motion surface
+# (/control/{startup,shutdown,home,stage_plate,present_plate,handoff}).
 host = "0.0.0.0"                            # Bind address (Tailscale-only by ACL)
 port = 8030                                 # HTTP port for the dashboard aggregator
 # Set true to run without hardware. Uses the in-memory DryRunTransport so
@@ -36,6 +37,16 @@ port = 8030                                 # HTTP port for the dashboard aggreg
 dry_run = false
 cors_origins = ["*"]                        # Tailnet ACLs gate access, so * is fine
 startup_connect_timeout_s = 5.0             # Auto-connect timeout at service start
+
+# --- Interlock override flags (EMERGENCY-ONLY; ship as true) ---
+# Hard X-Claim-Token enforcement on /control/* (HTTP 423 on miss). Set false
+# only to debug without a claim; never in production.
+enforce_claims = true
+# The staged-plate precondition that makes the `cd` latch unreachable through
+# the API (present_plate refused with HTTP 412 unless a plate is staged).
+# Set false ONLY for emergency calibration - disabling it lets a remote caller
+# drive the device into the sticky latch that needs a physical power-cycle.
+enforce_stage_precondition = true
 
 [dashboard]
 # Reported in GET /status once the FastAPI service is added. Must match the

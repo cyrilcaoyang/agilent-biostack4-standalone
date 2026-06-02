@@ -146,12 +146,14 @@ BioStackError
 +- BioStackConnectionError      # COM port open / serial layer failures
 +- BioStackProtocolError        # malformed frame, bad checksum, bad ACK
 +- BioStackCommandError         # device returned a 01 80 .. status payload
-   +- NoPlatePickedUpError      # specifically 01 80 01 17 (provisional)
-   +- StackEmptyError           # specifically 01 80 00 16 (provisional)
+   +- NoPlatePickedUpError      # 4th byte 17 (e.g. 01 80 01 17, 01 80 00 17)
+   +- StackEmptyError           # 4th byte 16 (e.g. 01 80 00 16, 01 80 02 16)
 ```
 
-Specific subclasses are populated as we confirm error semantics during the
-physical-test phase. Until then, `BioStackCommandError` is the catch-all.
+Subclass selection keys on the 4th (primary code) byte of the status payload,
+so every context sub-field variant maps to one subclass (confirmed on hardware
+2026-06-01; see `PROTOCOL_NOTES.md` "Step 4"). `BioStackCommandError` remains
+the catch-all for any other `01 80 .. ..` code.
 
 ### `models`
 

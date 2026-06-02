@@ -29,7 +29,7 @@ from .api import create_app
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="agilent-biostack4-serve",
-        description="Run the Agilent BioStack 4 read-only REST API (lab status spec v1.1).",
+        description="Run the Agilent BioStack 4 REST API (lab status spec v1.1; guarded control surface).",
     )
     parser.add_argument("--host", default=None, help="Override bind host")
     parser.add_argument("--port", type=int, default=None, help="Override port")

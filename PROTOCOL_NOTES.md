@@ -189,8 +189,87 @@ transfer turns out to be sufficient. Until then it is unsupported.
 Step 2's original "land in the output stack" pass criterion no longer
 applies; the criterion is now "plate is presented to the external drop-off".
 The sign-off row reflects that the behaviour is understood and the API
-renamed, with the external-handoff repeatability still to be exercised
-(Step 5).
+renamed. The external-handoff loop was subsequently exercised in Step 5
+(3× `stage_plate`→`present_plate` cycles, clean), with the only failure
+being an operator-sequencing one: a 4th `present_plate` on an empty
+handoff latched the device (`01 80 00 17`, power-cycle to recover) — the
+Step 4 hazard, not a loop defect.
+
+### Step 3 setup-command sufficiency (2026-05-29, partial)
+
+Our macros only ever send `bd` + `be` + the action (the captured `eb`/`f1`
+are never replayed), so the only setup command to test is `be`.
+
+- **`be` is NOT required for `c0` (home).** Sending `bd → c0` (no `be`)
+  homed cleanly: `00 80 00 00`, ~21.1 s — identical to the full
+  `bd → be → c0` sequence. The `be` frame is cargo-culted from the Gen5
+  capture and can be dropped from `HOME`.
+- **`be` sufficiency for `b9`/`cd` (the plate actions) is still OPEN** — it
+  needs a plate in the input stack to test a *successful* action with `be`
+  removed (running `b9` into an empty stack only yields the `01 80 02 16`
+  exhaustion code, which is inconclusive for `be`-sufficiency). Defer until a
+  plate is loaded.
+
+### Step 4 error codes + recovery finding (2026-05-29)
+
+Bench session, input stack empty / handoff empty:
+
+| Trigger | Status payload | Notes |
+| --- | --- | --- |
+| `cd` (`present_plate`) with no plate at the handoff | `01 80 00 17` | "No plate to pick up." Distinct from the previously-captured `01 80 01 17` (3rd byte `00` vs `01`) and `01 80 00 16`. Not yet mapped to a subclass. |
+| `bd` (status) immediately after the above failure | `01 80 00 17` | **The error is sticky** — `bd` echoes the latched error on the next call (even after closing/reopening the port). |
+| `c0` (`home`) while latched | `01 80 0e 02` | Home ran only ~2.4 s (vs ~21 s healthy) then faulted with a NEW code; this code then became the latched state. Homing does NOT clear the `01 80 00 17` latch and pushed the device into a further fault. |
+| `b9` (`stage_plate`) with the input stack empty | `01 80 02 16` | Captured cleanly during Step 5 end-of-run (`b9` from a healthy state). **NOT sticky** — the follow-up `bd` returned `00 80 00 00`; the device stayed healthy, no power-cycle needed. This is the graceful "ran out of plates" signal for the stage→present loop. |
+
+**Status-code families (working interpretation).** The 3rd byte appears to
+be a sub-field and the 4th byte the primary code:
+
+- `01 80 ?? 16` = **stack exhausted / no plate to take** (`00 16` move-all
+  terminal, `02 16` `b9` on empty input). Non-latching, recoverable.
+- `01 80 ?? 17` = **pickup/grip failure at the handoff** (`00 17` `cd` with
+  no plate, `01 17` failed pickup from the old capture). The `cd` `00 17`
+  case **latches** the device (see below).
+- `01 80 0e 02` = motion/home fault (only seen while already latched).
+
+So the exception mapping should likely key on the 4th byte (`16` →
+`StackEmptyError`, `17` → `NoPlatePickedUpError`) rather than matching all
+four bytes, which currently misses `02 16` and `00 17`.
+
+> **FIXED 2026-06-01.** `_FAILURE_EXCEPTIONS` / `_exception_for` in
+> `biostack.py` now key on the 4th (primary code) byte, so `01 80 02 16` and
+> `01 80 00 17` map to `StackEmptyError` / `NoPlatePickedUpError` like their
+> `00 16` / `01 17` siblings. Re-confirmed live the same day: a 3-plate
+> stage→present run was clean, and `stage_plate()` on the emptied input stack
+> returned `01 80 02 16` (now raising `StackEmptyError`) with the device
+> staying healthy (`bd` → `00 80 00 00`, no power-cycle). Covered by
+> `tests/test_biostack_dryrun.py`.
+
+**Recovery:** the `cd`/`01 80 00 17` latch could not be cleared by software. A **physical power-cycle**
+of the BioStack cleared it — confirmed 2026-05-29: after power-on (allow a
+few seconds to boot; the first `bd` may time out with no ACK while booting),
+`bd` returned `00 80 00 00` again. Inspect the carrier/gripper for a jam
+before powering back on.
+
+**Driver design implications (do before exposing `/control/*`):**
+
+1. Every macro currently begins with a `bd` status check and treats a
+   non-success `bd` as a fatal abort. Once the device latches an error,
+   `bd` fails, so *no* macro — including `home` — can run. The driver locks
+   itself out of its own recovery path. `home` (and any future reset) must
+   be able to run without a passing `bd` pre-check.
+2. The dangerous case is specifically the **`cd` "no plate at the handoff"**
+   failure (`01 80 00 17`), which **latches** the device with no software
+   recovery (`c0`/home makes it worse — see `01 80 0e 02`); a power-cycle is
+   required. By contrast, stack exhaustion on `b9` (`01 80 02 16`, the normal
+   end of a stage→present run) is **graceful and non-latching** — Step 5
+   confirmed the device stays healthy. So a stage→present loop that ends when
+   the input stack empties is safe; what must be avoided/handled is calling
+   `present_plate` when no plate is actually at the handoff. Finding a
+   software clear for the `cd` latch (likely via a fresh Gen5 capture) is
+   still worthwhile before an unattended control surface, but it is no longer
+   blocking for the basic loop.
+3. `01 80 0e 02` is unmapped and appears to be a motion/home fault. Capture
+   more instances before assigning a subclass.
 
 ## Safety Notes
 

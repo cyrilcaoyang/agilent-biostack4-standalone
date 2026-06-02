@@ -42,16 +42,20 @@ class BioStackCommandError(BioStackError):
 
 
 class NoPlatePickedUpError(BioStackCommandError):
-    """The pickup workflow ran but the device reported no plate was picked up.
+    """A pickup ran but the device reported no plate was picked up.
 
-    Provisionally bound to status payload ``01 80 01 17`` observed in
-    ``4_verify_step2_failed_pickup.csv``.
+    Bound to status payloads whose primary code byte (4th byte) is ``17``:
+    ``01 80 01 17`` (``4_verify_step2_failed_pickup.csv``) and ``01 80 00 17``
+    (``cd``/``present_plate`` with no plate at the handoff — the sticky latch,
+    confirmed on hardware 2026-06-01). See ``PROTOCOL_NOTES.md`` "Step 4".
     """
 
 
 class StackEmptyError(BioStackCommandError):
-    """A stack-to-stack move was attempted with no plates remaining.
+    """A move was attempted with no plate available to take.
 
-    Provisionally bound to status payload ``01 80 00 16`` observed at the
-    end of the ``move_all_plates_*`` captures.
+    Bound to status payloads whose primary code byte (4th byte) is ``16``:
+    ``01 80 00 16`` (``move_all_plates_*`` terminal) and ``01 80 02 16``
+    (``b9``/``stage_plate`` on an empty input stack — graceful, non-latching;
+    confirmed on hardware 2026-06-01). See ``PROTOCOL_NOTES.md`` "Step 4".
     """

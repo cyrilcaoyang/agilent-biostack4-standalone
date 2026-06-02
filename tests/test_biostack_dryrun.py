@@ -83,6 +83,35 @@ def test_stack_empty_failure_raises_stack_empty():
         stacker.present_plate()
 
 
+def test_b9_empty_input_stack_payload_raises_stack_empty():
+    """``01 80 02 16`` is the real-hardware ``stage_plate`` empty-stack code.
+
+    Confirmed on the bench 2026-06-01; the 3rd byte (``02``) differs from the
+    ``move_all`` terminal ``00 16``, so all-four-byte matching used to miss it
+    and fall back to the base exception.
+    """
+    stacker, transport = _make_stacker()
+    transport.set_response(0xB9, b"\x01\x80\x02\x16")
+    with stacker, pytest.raises(StackEmptyError) as excinfo:
+        stacker.stage_plate()
+    assert excinfo.value.command == 0xB9
+    assert excinfo.value.status_payload == b"\x01\x80\x02\x16"
+
+
+def test_cd_no_plate_at_handoff_payload_raises_no_plate_picked_up():
+    """``01 80 00 17`` is the real-hardware ``present_plate`` no-plate latch code.
+
+    Confirmed on the bench 2026-06-01; the 3rd byte (``00``) differs from the
+    old failed-pickup capture ``01 17``, so it used to miss the subclass.
+    """
+    stacker, transport = _make_stacker()
+    transport.set_response(0xCD, b"\x01\x80\x00\x17")
+    with stacker, pytest.raises(NoPlatePickedUpError) as excinfo:
+        stacker.present_plate()
+    assert excinfo.value.command == 0xCD
+    assert excinfo.value.status_payload == b"\x01\x80\x00\x17"
+
+
 def test_unknown_failure_payload_falls_back_to_base_exception():
     stacker, transport = _make_stacker()
     transport.set_response(0xCD, b"\x01\x80\xff\xfe")
