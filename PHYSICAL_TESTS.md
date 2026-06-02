@@ -150,3 +150,20 @@ performed and the bench operator has initialled them here:
 | 3 | 2026-05-29 | | PARTIAL. Only `be` is testable (our macros never send `eb`/`f1`). `be` is NOT required for `c0`/home: `bd → c0` (no `be`) homed cleanly, `00 80 00 00`, ~21.1 s. `be` sufficiency for `b9`/`cd` still OPEN — needs a plate (empty-stack run re-triggers the no-plate latch). See PROTOCOL_NOTES.md "Step 3 setup-command sufficiency". |
 | 4 | 2026-05-29 | | Mostly done. Codes captured: `cd`/no-plate-at-handoff → `01 80 00 17` (STICKY, latches; power-cycle to recover); `c0`/home while latched → `01 80 0e 02`; `b9`/empty-input-stack → `01 80 02 16` (graceful, NON-latching, device stayed healthy). Families: `…16`=stack-exhausted, `…17`=pickup-fail. KEY FINDING: macros gate on `bd`, so the `cd` latch locks out all macros incl. home — recovery is a power-cycle. Misalignment trial not done. See PROTOCOL_NOTES.md "Step 4". |
 | 5 | 2026-05-29 | | PASS (loop exercised). 3× `stage_plate`→`present_plate` cycles ran clean (each plate staged input→handoff, then presented to the external drop-off), operator clearing the drop-off between cycles. 4th call was a `present_plate` (`cd`) with no plate at the handoff → `01 80 00 17` — the device **latched** (sticky; software `home`/`bd` could not clear it) and was recovered by a physical **power-cycle**. Confirms the Step 4 hazard: a `cd` with nothing at the handoff is the failure mode to avoid, distinct from the graceful `b9`/empty-input `01 80 02 16`. External-handoff loop itself is repeatable; the latch is an operator-sequencing hazard, not a loop defect. See PROTOCOL_NOTES.md "Step 4". |
+
+## Deployment verification — v1.1 control service
+
+The v1.1 control API (claim protocol + guarded `/control/*`, see
+`CONTROL_API_PLAN.md`) was merged to `main` (PR #1, merge commit `9408fca`)
+and the `biostack4` Windows service was restarted to pick it up.
+
+| Date | Check | Result |
+| --- | --- | --- |
+| 2026-06-02 | `GET http://localhost:8050/` | `protocol_version: "1.1"` (was `"1.0"` before the service restart — confirming the live process now runs the merged code, not just the repo). |
+| 2026-06-02 | `GET http://localhost:8050/status` (real serial transport, **not** dry-run) | `equipment_status: "ready"`, `allowed_actions: ["shutdown", "home", "stage_plate", "handoff"]`, `details.plate_staged: false`, `details.claimed_by: null`, `last_error: null`. |
+
+The `allowed_actions` set is the ready/not-staged shape: `present_plate` is
+correctly **omitted** (the staged-plate latch guard), while `stage_plate` and
+the composite `handoff` are offered. The full claim/enforcement and
+`stage_plate`→`present_plate`-over-HTTP round trip against a real plate is the
+remaining bench item (tracked in `CONTROL_API_PLAN.md` §9 "Hardware").
