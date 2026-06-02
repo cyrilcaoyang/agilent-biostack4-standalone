@@ -58,14 +58,29 @@ class StatusPayload:
         )
 
 
-_FAILURE_EXCEPTIONS: dict[bytes, type[BioStackCommandError]] = {
-    b"\x01\x80\x01\x17": NoPlatePickedUpError,
-    b"\x01\x80\x00\x16": StackEmptyError,
+# Failure status payloads are 4 bytes shaped ``01 80 <sub> <code>``. The 4th
+# byte is the primary failure code; the 3rd is a context sub-field that varies
+# for the same underlying condition. Bench-confirmed 2026-05-29 / re-confirmed
+# on real hardware 2026-06-01 (see PROTOCOL_NOTES.md "Step 4"):
+#
+#   * ``…16`` = stack exhausted / no plate to take. Seen as ``01 80 00 16``
+#     (move-all terminal) and ``01 80 02 16`` (``b9`` on an empty input stack).
+#   * ``…17`` = pickup / grip failure at the handoff. Seen as ``01 80 01 17``
+#     (old failed-pickup capture) and ``01 80 00 17`` (``cd`` with no plate at
+#     the handoff — the sticky latch).
+#
+# Key on the primary code byte so every sub-field variant maps to one subclass;
+# the previous all-four-bytes match missed the real-hardware ``02 16`` / ``00 17``.
+_FAILURE_EXCEPTIONS: dict[int, type[BioStackCommandError]] = {
+    0x16: StackEmptyError,
+    0x17: NoPlatePickedUpError,
 }
 
 
 def _exception_for(status_payload: bytes) -> type[BioStackCommandError]:
-    return _FAILURE_EXCEPTIONS.get(status_payload, BioStackCommandError)
+    if not status_payload:
+        return BioStackCommandError
+    return _FAILURE_EXCEPTIONS.get(status_payload[-1], BioStackCommandError)
 
 
 class BioStack4:

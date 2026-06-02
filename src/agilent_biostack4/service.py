@@ -194,10 +194,12 @@ class BioStack4Service:
         if not self.dry_run:
             details["com_port"] = com_port
         details["read_only"] = True
-        # Bench validation (PHYSICAL_TESTS.md steps 0-5) signed off on this
-        # date. The service stays read-only by choice; the motion control
-        # surface is a separate follow-up, not a validation gap.
-        details["bench_validated"] = "2026-05-29"
+        # Bench validation (PHYSICAL_TESTS.md steps 0-5) signed off 2026-05-29;
+        # the stage->present loop and graceful empty-stack exhaustion were
+        # re-confirmed on real hardware 2026-06-01. The service stays read-only
+        # by choice; the motion control surface is a separate follow-up, not a
+        # validation gap.
+        details["bench_validated"] = "2026-05-29 (re-confirmed 2026-06-01)"
 
         if self.dry_run:
             state: str = "dry_run"

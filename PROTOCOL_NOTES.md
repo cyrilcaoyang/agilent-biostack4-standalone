@@ -235,6 +235,15 @@ So the exception mapping should likely key on the 4th byte (`16` →
 `StackEmptyError`, `17` → `NoPlatePickedUpError`) rather than matching all
 four bytes, which currently misses `02 16` and `00 17`.
 
+> **FIXED 2026-06-01.** `_FAILURE_EXCEPTIONS` / `_exception_for` in
+> `biostack.py` now key on the 4th (primary code) byte, so `01 80 02 16` and
+> `01 80 00 17` map to `StackEmptyError` / `NoPlatePickedUpError` like their
+> `00 16` / `01 17` siblings. Re-confirmed live the same day: a 3-plate
+> stage→present run was clean, and `stage_plate()` on the emptied input stack
+> returned `01 80 02 16` (now raising `StackEmptyError`) with the device
+> staying healthy (`bd` → `00 80 00 00`, no power-cycle). Covered by
+> `tests/test_biostack_dryrun.py`.
+
 **Recovery:** the `cd`/`01 80 00 17` latch could not be cleared by software. A **physical power-cycle**
 of the BioStack cleared it — confirmed 2026-05-29: after power-on (allow a
 few seconds to boot; the first `bd` may time out with no ACK while booting),
