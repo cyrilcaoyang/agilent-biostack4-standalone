@@ -8,11 +8,56 @@ exposes only the two workflows the lab needs (`stage_plate`, `present_plate`),
 and converts any non-success status payload from the device into a typed
 Python exception.
 
-Bench validation steps 0-5 are signed off (2026-05-29; see
-[PHYSICAL_TESTS.md](PHYSICAL_TESTS.md)). The read-only status service is
-cleared for deployment; the motion `/control/*` surface remains gated.
+**This repo conforms to lab status spec v1.1.** The FastAPI service
+implements the read baseline (`/`, `/health`, `/status`), the cooperative
+claim protocol (`/control/{claim,heartbeat,release}` with hard
+`X-Claim-Token` enforcement), and a guarded motion surface
+(`/control/{startup,shutdown,home,stage_plate,present_plate,handoff}`).
+
+Bench validation steps 0-5 are signed off (2026-05-29; re-confirmed
+2026-06-01; see [PHYSICAL_TESTS.md](PHYSICAL_TESTS.md)).
 Read [PLAN.md](PLAN.md) and [PHYSICAL_TESTS.md](PHYSICAL_TESTS.md) before
 running any code path that actually opens COM8.
+
+### The staged-plate safety invariant
+
+The BioStack has two "out of plate" failure modes. `stage_plate` (`b9`)
+on an empty input stack fails **gracefully** (`StackEmptyError`, device
+stays healthy). But `present_plate` (`cd`) into an **empty handoff**
+**latches** the device (`01 80 00 17`) — a sticky failure that software
+cannot clear (`home` makes it worse) and that requires a physical
+power-cycle. Because every macro begins with a `bd` status check that a
+latched device fails, the latch locks the driver out of its own recovery.
+
+So the API makes the latch **unreachable**: the service tracks a
+`_plate_staged` flag (set after `stage_plate`, cleared after
+`present_plate`, `False` on startup) and **refuses `present_plate` with
+HTTP 412 unless a plate is known to be staged**. The flag is inferred
+from this service's own command history (the protocol has no
+handoff-occupancy readback), is lost on restart, and can desync on an
+out-of-band move — but the failure direction is always toward *refusing*
+`present_plate`, never toward issuing `cd` blindly. The composite
+`POST /control/handoff` (stage **then** present in one server-side op) is
+the recommended orchestration primitive: it is structurally incapable of
+presenting into an empty handoff.
+
+### `last_error.code` taxonomy
+
+`last_error.code` is drawn from a stable set (see
+`LAST_ERROR_CODES` in `service.py`):
+
+| `code` | Raised by | Meaning / recovery |
+| --- | --- | --- |
+| `stack_empty` | `stage_plate`/`handoff` on an empty input stack | Graceful, non-latching. Add plates and retry. |
+| `no_plate_picked_up` | `present_plate`/`handoff` into an empty handoff | The sticky **latch**. Device goes to `equipment_status: error`; power-cycle required. |
+| `latched` | reserved | Reserved for follow-on failures observed while already latched. |
+| `connect_failed` | `startup` / transport open | Serial port could not be opened. |
+| `protocol_error` | malformed wire bytes | Bad ACK / header / checksum. |
+| `command_error` | any other device-reported failure | Catch-all device failure status. |
+
+Per spec §6.4, `last_error` auto-clears to `null` on the first 2xx from
+any operational `/control/*` endpoint; 412 precondition refusals never
+touch it (§6.3).
 
 ## Status
 
@@ -23,9 +68,9 @@ running any code path that actually opens COM8.
 | Dry-run transport | implemented |
 | Serial transport | implemented; exercised against hardware 2026-05-29 |
 | High-level workflows (`status`, `home`, `stage_plate`, `present_plate`) | implemented as recorded-sequence playback; command roles bench-confirmed 2026-05-29 |
-| FastAPI service (read-only `/`, `/health`, `/status`) | implemented; reports spec v1.0 (read-only baseline) |
-| FastAPI service (`/control/*` + claims) | not yet (follow-up; see PLAN.md) |
-| Physical validation | steps 0-5 signed off 2026-05-29 (see PHYSICAL_TESTS.md) |
+| FastAPI service (`/`, `/health`, `/status`) | implemented; reports spec **v1.1** |
+| FastAPI service (claims + guarded `/control/*`) | implemented; hard `X-Claim-Token` enforcement, staged-plate 412 interlock |
+| Physical validation | steps 0-5 signed off 2026-05-29; re-confirmed 2026-06-01 (see PHYSICAL_TESTS.md) |
 
 ## Install (development)
 
@@ -57,11 +102,11 @@ stacker.present_plate()  # handoff -> external drop-off (out of the instrument)
 stacker.close()
 ```
 
-## Run the read-only dashboard service
+## Run the dashboard service
 
-The status service can run on any host (no hardware needed) and the
-`ac-organic-lab` dashboard will pick it up by flipping `agilent_biostack`
-from `adapter: mock` to `adapter: http` in `equipment.yaml`.
+The service can run on any host (no hardware needed) and the
+`ac-organic-lab` dashboard picks it up via the `agilent_biostack`
+`adapter: http` entry in `equipment.yaml` (set `protocol: "1.1"`).
 
 ```bash
 uv pip install -e ".[dev]"
@@ -70,11 +115,36 @@ uv run agilent-biostack4-serve --dry-run --port 8030
 curl http://localhost:8030/status
 ```
 
-The dry-run tile will report `equipment_status: dry_run`. Once
-[PHYSICAL_TESTS.md](PHYSICAL_TESTS.md) is signed off, deploy on the lab
-PC with `dry_run = false` in `config.toml` and the same endpoint starts
-reporting `ready` / `requires_init` / `error` based on the real serial
-transport.
+The dry-run tile reports `equipment_status: dry_run` and advertises the
+full action set. Deploy on the lab PC with `dry_run = false` in
+`config.toml` and the same endpoint reports `ready` / `requires_init` /
+`busy` / `error` based on the real serial transport.
+
+To drive a plate over HTTP, acquire a claim first (the `X-Claim-Token`
+is enforced on every `/control/*` call):
+
+```bash
+TOKEN=$(curl -s -XPOST localhost:8030/control/claim \
+  -H 'content-type: application/json' \
+  -d '{"owner":"me","session_id":"wf-1","ttl_s":30}' | python -c 'import sys,json;print(json.load(sys.stdin)["claim_token"])')
+
+# stage then present in one latch-safe operation:
+curl -XPOST localhost:8030/control/handoff -H "X-Claim-Token: $TOKEN"
+curl -XPOST localhost:8030/control/release -H "X-Claim-Token: $TOKEN"
+```
+
+A tokenless `/control/*` call returns `423 Locked`; a `present_plate`
+with nothing staged returns `412` (and never issues `cd`).
+
+### Emergency override flags
+
+`config.toml` `[service]` carries two interlock flags, both default
+`true` and **emergency-only** (never ship `false`):
+
+* `enforce_claims` — hard `X-Claim-Token` enforcement (423 on miss).
+* `enforce_stage_precondition` — the staged-plate 412 interlock that
+  makes the `cd` latch unreachable. Disabling it lets a remote caller
+  drive the device into the sticky latch.
 
 ## Run against real hardware (driver only)
 

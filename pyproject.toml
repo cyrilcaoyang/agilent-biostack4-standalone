@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agilent-biostack4"
-version = "0.1.0"
+version = "0.2.0"
 description = "Standalone Python driver for the Agilent BioStack 4 microplate stacker over RS-232"
 readme = "README.md"
 authors = [

@@ -1,0 +1,46 @@
+{
+  "protocol_version": "1.1",
+  "equipment_id": "agilent_biostack",
+  "equipment_name": "Agilent BioStack 4",
+  "equipment_kind": "plate_stacker",
+  "equipment_version": null,
+  "host": "biostack4-pc",
+  "equipment_status": "requires_init",
+  "message": "Serial transport not open. POST /control/startup to connect.",
+  "required_actions": [
+    "startup"
+  ],
+  "allowed_actions": [
+    "startup"
+  ],
+  "device_time": "2026-06-02T00:00:00Z",
+  "uptime_seconds": 0.0,
+  "components": {
+    "transport": {
+      "connected": false,
+      "state": "closed",
+      "message": null,
+      "last_event_at": null
+    },
+    "gripper": {
+      "connected": false,
+      "state": "unknown",
+      "message": "Position not polled (no readback in protocol)",
+      "last_event_at": null
+    },
+    "handoff": {
+      "connected": false,
+      "state": "empty",
+      "message": "Inferred from command history; no occupancy readback",
+      "last_event_at": null
+    }
+  },
+  "metrics": {},
+  "last_error": null,
+  "details": {
+    "com_port": "COM8",
+    "plate_staged": false,
+    "claimed_by": null,
+    "bench_validated": "2026-05-29 (re-confirmed 2026-06-01)"
+  }
+}
