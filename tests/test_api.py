@@ -42,7 +42,7 @@ def test_probe_returns_identity(client: TestClient) -> None:
     body = response.json()
     assert body["equipment_id"] == "agilent_biostack"
     assert body["equipment_name"] == "Agilent BioStack 4"
-    assert body["protocol_version"] == "1.1"
+    assert body["protocol_version"] == "1.2"
 
 
 def test_health_returns_healthy(client: TestClient) -> None:
@@ -55,7 +55,7 @@ def test_status_dry_run_envelope(client: TestClient) -> None:
     response = client.get("/status")
     assert response.status_code == 200
     body = response.json()
-    assert body["protocol_version"] == "1.1"
+    assert body["protocol_version"] == "1.2"
     assert body["equipment_id"] == "agilent_biostack"
     assert body["equipment_kind"] == "plate_stacker"
     assert body["equipment_status"] == "dry_run"

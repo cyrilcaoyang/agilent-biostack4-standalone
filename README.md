@@ -8,11 +8,55 @@ exposes only the two workflows the lab needs (`stage_plate`, `present_plate`),
 and converts any non-success status payload from the device into a typed
 Python exception.
 
-**This repo conforms to lab status spec v1.1.** The FastAPI service
+**This repo conforms to lab status spec v1.2.** The FastAPI service
 implements the read baseline (`/`, `/health`, `/status`), the cooperative
 claim protocol (`/control/{claim,heartbeat,release}` with hard
 `X-Claim-Token` enforcement), and a guarded motion surface
 (`/control/{startup,shutdown,home,stage_plate,present_plate,handoff}`).
+The wire types come from the shared
+[`sdl-lab-contract`](https://github.com/AccelerationConsortium/sdl-lab-contract)
+package rather than a vendored copy.
+
+### Activity and utilization (v1.2)
+
+`equipment_status` answers *is this stacker healthy*; `activity` answers
+*is it moving a plate right now*. They are independent, and `activity` is
+read off the macro-in-flight flag — never derived from `equipment_status`,
+which §2.3 forbids because it would add no information.
+
+**Primary operation** is a **plate move**: `stage_plate` (stack → carrier),
+`present_plate` (carrier → instrument), or `handoff` (both, as one
+commanded delivery). `home` also reports `activity: "running"` — the
+carrier is moving and no second macro may start — but carries no plate, so
+it is not counted as a cycle.
+
+| Situation | `equipment_status` | `activity` |
+|---|---|---|
+| Transport not open | `requires_init` | `idle` |
+| Open, no macro running | `ready` | `idle` |
+| Plate move or homing in flight | `busy` | `running` |
+| Latched (no plate at the handoff) | `error` | `running` until the macro unwinds, then `idle` |
+| Dry-run | `dry_run` | observed — the simulation's real activity |
+
+`metrics["cycles_total"]` is the spec's reserved counter (§2.3.1) and
+counts completed plate moves. It matters because a stage→present cycle
+takes ~21 s, comfortably inside the dashboard's 60 s poll: a sampled
+`activity` series does not undercount those moves, it misses them
+entirely. The poll-to-poll delta is the accountable number, and it resets
+on service restart by contract.
+
+`activity_since` is the instant the current span began, so a reader can
+recover an in-flight macro's true elapsed time. While `activity` is
+`running`, `allowed_actions` is empty — nothing may start a second macro.
+
+Worth noting for the dry-run row above: the top-level state stays
+`dry_run` for the process's whole life, so before v1.2 a simulated stacker
+gave a reader no way to see that work was happening at all. `activity` is
+where that answer now lives.
+
+`GET /status` never takes the operation lock, so it answers immediately
+even while a ~21 s macro is running — which is what makes `running`
+observable in the first place.
 
 Bench validation steps 0-5 are signed off (2026-05-29; re-confirmed
 2026-06-01; see [PHYSICAL_TESTS.md](PHYSICAL_TESTS.md)).
@@ -68,8 +112,9 @@ touch it (§6.3).
 | Dry-run transport | implemented |
 | Serial transport | implemented; exercised against hardware 2026-05-29 |
 | High-level workflows (`status`, `home`, `stage_plate`, `present_plate`) | implemented as recorded-sequence playback; command roles bench-confirmed 2026-05-29 |
-| FastAPI service (`/`, `/health`, `/status`) | implemented; reports spec **v1.1** |
+| FastAPI service (`/`, `/health`, `/status`) | implemented; reports spec **v1.2** |
 | FastAPI service (claims + guarded `/control/*`) | implemented; hard `X-Claim-Token` enforcement, staged-plate 412 interlock |
+| v1.2 activity + utilization | `activity` / `activity_since` observed from the macro-in-flight flag; reserved `cycles_total` counts plate moves |
 | Physical validation | steps 0-5 signed off 2026-05-29; re-confirmed 2026-06-01 (see PHYSICAL_TESTS.md) |
 
 ## Install (development)

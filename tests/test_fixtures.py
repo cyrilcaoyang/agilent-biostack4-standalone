@@ -32,7 +32,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 def test_fixture_parses_as_equipment_status(name: str) -> None:
     body = json.loads((FIXTURES / f"{name}.json").read_text())
     status = EquipmentStatus.model_validate(body)
-    assert status.protocol_version == "1.1"
+    assert status.protocol_version == "1.2"
 
 
 def test_requires_init_shape() -> None:

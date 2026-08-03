@@ -18,10 +18,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# `sdl-lab-contract` lives with pydantic in the api/dev extras rather than
+# in core: the serial driver is usable without any of the REST stack, and
+# core deps stay installable on a non-Windows box with no wheels to build.
 api = [
     "fastapi>=0.110",
     "uvicorn[standard]>=0.27",
     "pydantic>=2.6",
+    "sdl-lab-contract",
 ]
 dev = [
     "pytest>=8.0",
@@ -29,7 +33,13 @@ dev = [
     "fastapi>=0.110",
     "uvicorn[standard]>=0.27",
     "pydantic>=2.6",
+    "sdl-lab-contract",
 ]
+
+# Not on PyPI; pinned to the tag whose major.minor equals the STATUS_SPEC
+# revision this device speaks (v1.2).
+[tool.uv.sources]
+sdl-lab-contract = { git = "https://github.com/AccelerationConsortium/sdl-lab-contract", tag = "v1.2.0" }
 
 [project.scripts]
 agilent-biostack4-serve = "agilent_biostack4.__main__:main"

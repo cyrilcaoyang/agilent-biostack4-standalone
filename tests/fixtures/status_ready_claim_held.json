@@ -1,5 +1,5 @@
 {
-  "protocol_version": "1.1",
+  "protocol_version": "1.2",
   "equipment_id": "agilent_biostack",
   "equipment_name": "Agilent BioStack 4",
   "equipment_kind": "plate_stacker",
@@ -14,6 +14,8 @@
     "stage_plate",
     "handoff"
   ],
+  "activity": "idle",
+  "activity_since": "2026-05-29T14:12:03Z",
   "device_time": "2026-06-02T00:00:00Z",
   "uptime_seconds": 0.0,
   "components": {
@@ -36,7 +38,13 @@
       "last_event_at": null
     }
   },
-  "metrics": {},
+  "metrics": {
+    "cycles_total": {
+      "value": 4,
+      "unit": "count",
+      "timestamp": null
+    }
+  },
   "last_error": null,
   "details": {
     "com_port": "COM8",

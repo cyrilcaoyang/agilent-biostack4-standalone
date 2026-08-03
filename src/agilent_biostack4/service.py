@@ -83,6 +83,7 @@ from .models import (
     ComponentStatus,
     EquipmentStatus,
     ErrorInfo,
+    MetricValue,
 )
 from .transport import DryRunTransport, SerialTransport, Transport
 
@@ -108,6 +109,12 @@ LAST_ERROR_CODES: frozenset[str] = frozenset(
 # match the driver method names and the future plate_stacker catalog — see
 # CONTROL_API_PLAN.md §8 / §10 decision 2).
 _ALL_ACTIONS = ["startup", "shutdown", "home", "stage_plate", "present_plate", "handoff"]
+
+# The stacker's primary operation: moving a plate. `home` is a homing motion
+# with no plate in hand — it reports `activity: "running"` (the carrier is
+# moving, and no second macro may start) but is not counted as a cycle.
+# `handoff` is one commanded delivery even though it stages then presents.
+_PLATE_MOVE_ACTIONS = frozenset({"stage_plate", "present_plate", "handoff"})
 
 
 # ---------------------------------------------------------------------------
@@ -195,6 +202,17 @@ class BioStack4Service:
         self._current_action: str | None = None
         self._plate_staged = False
         self._latched = False
+        # Activity span tracking (STATUS_SPEC v1.2 §2.3). Stamped by
+        # _set_busy / _clear_busy, which already bracket every macro, so
+        # `activity_since` is the true start of the current span rather
+        # than the instant some poll happened to notice.
+        self._activity: str = "idle"
+        self._activity_since: datetime = datetime.now(timezone.utc)
+        # Reserved monotonic counter (§2.3.1). A stage->present cycle is
+        # ~21 s — well inside the dashboard's 60 s poll — so a sampled
+        # activity series misses whole plate moves rather than
+        # undercounting them. Counts plate moves only; see _on_success.
+        self._cycles_total = 0
 
         self.equipment_id: str = _cfg_get(cfg, "dashboard", "equipment_id", "agilent_biostack")
         self.equipment_name: str = _cfg_get(
@@ -282,6 +300,9 @@ class BioStack4Service:
                 async with self._state_lock:
                     self._plate_staged = False
                     self._last_error = None
+                    # One commanded delivery = one cycle, even though it is
+                    # a stage followed by a present internally.
+                    self._cycles_total += 1
             finally:
                 await self._clear_busy()
 
@@ -382,13 +403,21 @@ class BioStack4Service:
             )
         return (False, None)
 
-    def _allowed_actions(self, state: str) -> list[str]:
+    def _allowed_actions(self, state: str, activity: str = "idle") -> list[str]:
         """Compute ``allowed_actions`` for ``state`` (the §6.2 mirror).
 
         Built from the same :meth:`evaluate_stage_precondition` helper the
         control handlers consult, so ``X in allowed_actions`` iff a POST of
         ``X`` would not 412.
+
+        Also gated on ``activity`` (§2.3): while a macro is in flight nothing
+        that would start a second one is advertised. The two agree by
+        construction today (``busy`` and ``running`` both come from
+        ``_busy``), but the spec keys this on activity, and stating it here
+        means a later state change cannot quietly break the guarantee.
         """
+        if activity == "running":
+            return []
         if state == "dry_run":
             # Advertise the full set so the surface is exercisable in CI/dev
             # (CONTROL_API_PLAN.md §10 decision 4).
@@ -479,6 +508,16 @@ class BioStack4Service:
 
         required_actions: list[str] = ["startup"] if state == "requires_init" else []
 
+        # Health (§2.2) and activity (§2.3) are independent answers. Activity
+        # is read straight off the macro-in-flight flag — never derived from
+        # `state`, which would add no information. The invariants hold by
+        # construction: `busy` is set from the same flag, and every other
+        # state above is reachable only while no macro is running. The one
+        # deliberate exception is a latch recorded mid-macro, which reports
+        # `error` + `running` until the finally clause lands — legal, and
+        # more honest than pretending the carrier has already stopped.
+        activity = self._activity
+
         return EquipmentStatus(
             protocol_version=PROTOCOL_VERSION,
             equipment_id=self.equipment_id,
@@ -487,12 +526,15 @@ class BioStack4Service:
             equipment_version=self.equipment_version,
             host=host,
             equipment_status=state,  # type: ignore[arg-type]
+            activity=activity,  # type: ignore[arg-type]
+            activity_since=self._activity_since,
             message=message,
             required_actions=required_actions,
-            allowed_actions=self._allowed_actions(state),
+            allowed_actions=self._allowed_actions(state, activity),
             device_time=now,
             uptime_seconds=uptime,
             components=components,
+            metrics={"cycles_total": MetricValue(value=self._cycles_total, unit="count")},
             last_error=self._last_error,
             details=details,
         )
@@ -503,11 +545,24 @@ class BioStack4Service:
         async with self._state_lock:
             self._busy = True
             self._current_action = action
+            self._note_activity("running")
 
     async def _clear_busy(self) -> None:
         async with self._state_lock:
             self._busy = False
             self._current_action = None
+            self._note_activity("idle")
+
+    def _note_activity(self, activity: str) -> None:
+        """Record an observed activity, stamping ``activity_since`` only when
+        the value changes (§2.3: the start of the CURRENT span).
+
+        Caller must already hold ``_state_lock`` — this never takes it, so it
+        is safe to call from the busy helpers that do.
+        """
+        if activity != self._activity:
+            self._activity = activity
+            self._activity_since = datetime.now(timezone.utc)
 
     async def _on_success(self, action: str) -> None:
         async with self._state_lock:
@@ -520,6 +575,8 @@ class BioStack4Service:
             elif action == "present_plate":
                 self._plate_staged = False
             # home / startup / shutdown leave _plate_staged untouched.
+            if action in _PLATE_MOVE_ACTIONS:
+                self._cycles_total += 1
 
     async def _record_error(
         self, exc: Exception, code: str, *, latched: bool = False
